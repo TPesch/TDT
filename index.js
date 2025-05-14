@@ -309,6 +309,8 @@ client.connect()
 client.on('cheer', (channel, userstate, message) => {
   const username = userstate.username || 'anonymous';
   const bits = userstate.bits;
+  
+  // Check if this individual donation meets the threshold
   const spinTriggered = bits >= BIT_THRESHOLD_FOR_SPIN;
   
   console.log(`${username} cheered ${bits} bits!`);
@@ -316,9 +318,9 @@ client.on('cheer', (channel, userstate, message) => {
   // Record to CSV
   recordDonation(username, bits, message, spinTriggered);
   
-  // Alert for spin if threshold met
+  // Alert for spin if threshold met for this individual donation
   if (spinTriggered) {
-    console.log(`🎉 SPIN ALERT! ${username} donated ${bits} bits!`);
+    console.log(`🎉 SPIN ALERT! ${username} donated ${bits} bits (over the ${BIT_THRESHOLD_FOR_SPIN} threshold)!`);
   }
 });
 
