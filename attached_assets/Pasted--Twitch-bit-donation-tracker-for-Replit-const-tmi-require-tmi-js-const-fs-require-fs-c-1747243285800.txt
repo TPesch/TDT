@@ -1,0 +1,108 @@
+// Twitch bit donation tracker for Replit
+const tmi = require('tmi.js');
+const fs = require('fs');
+const path = require('path');
+const express = require('express');
+
+// Configuration
+const CHANNEL_NAME = 'your_channel_name';
+const BIT_THRESHOLD_FOR_SPIN = 100; // Bits needed for a spin
+const CSV_PATH = path.join(__dirname, 'bit_donations.csv');
+
+// Initialize CSV file if it doesn't exist
+function initializeCSV() {
+  if (!fs.existsSync(CSV_PATH)) {
+    const header = 'Timestamp,Username,Bits,Message,SpinTriggered\n';
+    fs.writeFileSync(CSV_PATH, header);
+    console.log('CSV file created successfully!');
+  }
+}
+
+// Record donation to CSV (simpler than Excel for Replit)
+function recordDonation(username, bits, message, spinTriggered) {
+  const timestamp = new Date().toISOString();
+  // Escape any commas in the message to maintain CSV format
+  const escapedMessage = message.replace(/,/g, ';');
+  const newRow = `${timestamp},"${username}",${bits},"${escapedMessage}",${spinTriggered ? 'YES' : 'NO'}\n`;
+  
+  fs.appendFileSync(CSV_PATH, newRow);
+  console.log(`Recorded ${bits} bit donation from ${username}`);
+}
+
+// Configure Twitch chat client
+const client = new tmi.Client({
+  options: { debug: true },
+  connection: {
+    secure: true,
+    reconnect: true
+  },
+  channels: [CHANNEL_NAME]
+});
+
+// Set up simple web server to keep Replit alive
+const app = express();
+const port = process.env.PORT || 3000;
+
+app.get('/', (req, res) => {
+  res.send(`
+    <html>
+    <head>
+      <title>Twitch Bit Tracker</title>
+      <style>
+        body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; }
+        .status { padding: 20px; background-color: #f0f0f0; border-radius: 5px; }
+        .active { color: green; font-weight: bold; }
+      </style>
+    </head>
+    <body>
+      <h1>Twitch Bit Donation Tracker</h1>
+      <div class="status">
+        <p>Status: <span class="active">Active</span></p>
+        <p>Channel: ${CHANNEL_NAME}</p>
+        <p>Spin Threshold: ${BIT_THRESHOLD_FOR_SPIN} bits</p>
+      </div>
+      <h2>Recent Donations</h2>
+      <p>View the CSV file for complete donation history.</p>
+    </body>
+    </html>
+  `);
+});
+
+app.get('/donations', (req, res) => {
+  if (fs.existsSync(CSV_PATH)) {
+    const data = fs.readFileSync(CSV_PATH, 'utf8');
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename=bit_donations.csv');
+    res.send(data);
+  } else {
+    res.status(404).send('No donations recorded yet');
+  }
+});
+
+// Connect to Twitch
+client.connect().catch(console.error);
+console.log(`Attempting to connect to ${CHANNEL_NAME}'s channel`);
+
+// Listen for cheer events
+client.on('cheer', (channel, userstate, message) => {
+  const username = userstate.username;
+  const bits = userstate.bits;
+  const spinTriggered = bits >= BIT_THRESHOLD_FOR_SPIN;
+  
+  console.log(`${username} cheered ${bits} bits!`);
+  
+  // Record to CSV
+  recordDonation(username, bits, message, spinTriggered);
+  
+  // Alert for spin if threshold met
+  if (spinTriggered) {
+    console.log(`🎉 SPIN ALERT! ${username} donated ${bits} bits!`);
+  }
+});
+
+// Initialize and start
+initializeCSV();
+app.listen(port, () => {
+  console.log(`Web server running on port ${port}`);
+  console.log(`Bit donation tracker is running. Spin threshold: ${BIT_THRESHOLD_FOR_SPIN} bits`);
+});
