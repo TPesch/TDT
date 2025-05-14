@@ -545,8 +545,65 @@ app.get('/api/gift-subs', (req, res) => {
   const stats = getGiftSubStats();
   res.json({
     giftSubs: recentGiftSubs,
-    stats: stats
+    giftSubStats: stats
   });
+});
+
+// API endpoint to update gift sub spin status
+app.post('/api/gift-subs/update-spin', (req, res) => {
+  const { timestamp, spinTriggered } = req.body;
+  
+  if (!timestamp || spinTriggered === undefined) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+  
+  try {
+    // Read CSV file
+    if (!fs.existsSync(GIFT_SUBS_CSV_PATH)) {
+      return res.status(404).json({ error: 'Gift sub records not found' });
+    }
+    
+    const fileContent = fs.readFileSync(GIFT_SUBS_CSV_PATH, 'utf8');
+    const lines = fileContent.split('\n').filter(line => line.trim() !== '');
+    const header = lines[0];
+    const dataLines = lines.slice(1);
+    
+    // Find the line with matching timestamp
+    let updated = false;
+    const updatedLines = dataLines.map(line => {
+      const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
+      const parts = line.split(regex);
+      
+      if (parts.length >= 5 && parts[0].trim() === timestamp.trim()) {
+        // Update the spin status
+        parts[4] = spinTriggered ? 'YES' : 'NO';
+        updated = true;
+        return parts.join(',');
+      }
+      return line;
+    });
+    
+    if (!updated) {
+      return res.status(404).json({ error: 'Gift sub not found' });
+    }
+    
+    // Write back to CSV
+    const updatedContent = [header, ...updatedLines].join('\n');
+    fs.writeFileSync(GIFT_SUBS_CSV_PATH, updatedContent);
+    
+    // Send updated donations data
+    const recentGiftSubs = getRecentGiftSubs();
+    const giftSubStats = getGiftSubStats();
+    res.json({
+      success: true, 
+      message: 'Gift sub spin status updated successfully',
+      giftSubs: recentGiftSubs,
+      giftSubStats: giftSubStats
+    });
+  } catch (error) {
+    console.error('Error updating gift sub spin status:', error);
+    res.status(500).json({ error: 'Failed to update gift sub spin status' });
+  }
 });
 
 app.get('/api/gift-subs/download', (req, res) => {

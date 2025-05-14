@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gift Subscriptions - Twitch Bit Tracker - girl_dm_</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+  <header>
+    <h1><i class="fas fa-chart-bar"></i> Twitch Bit Donation Tracker</h1>
+    <p>Channel: girl_dm_</p>
+  </header>
+  
+  <div class="container">
+    <div class="nav-links">
+      <a href="/" class="button button-secondary">Dashboard</a>
+      <a href="/donations" class="button button-secondary">Bit Donations</a>
+      <a href="/gift-subs" class="button">Gift Subs</a>
+      <a href="/spin-commands" class="button button-secondary">!spin Commands</a>
+      <a href="/api/gift-subs/download" class="button button-secondary">Download CSV</a>
+    </div>
+    
+    <div class="status-panel">
+      <h2><i class="fas fa-chart-pie"></i> Gift Sub Statistics</h2>
+      <div class="status-grid">
+        <div class="status-item">
+          <div>Total Gift Subs</div>
+          <div id="total-gift-subs" class="status-value">0</div>
+        </div>
+        <div class="status-item">
+          <div>Total Spins Triggered</div>
+          <div id="total-spins" class="status-value">0</div>
+        </div>
+        <div class="status-item">
+          <div>Top Gifter</div>
+          <div id="top-gifter" class="status-value">None yet</div>
+        </div>
+        <div class="status-item">
+          <div>Spin Threshold</div>
+          <div class="status-value">3+ gift subs</div>
+        </div>
+      </div>
+    </div>
+    
+    <div id="spin-alert" class="spin-alert">
+      <h3><i class="fas fa-exclamation-circle"></i> SPIN ALERT!</h3>
+      <p id="spin-alert-message">Someone triggered a spin with gift subs!</p>
+      <i id="spinner" class="fas fa-sync-alt" style="display: none;"></i>
+    </div>
+    
+    <div class="donation-list">
+      <h2><i class="fas fa-gift"></i> Recent Gift Subscriptions</h2>
+      <p>Showing gift subscription events that triggered spins.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Username</th>
+            <th>Gift Count</th>
+            <th>Recipients</th>
+            <th>Spin</th>
+          </tr>
+        </thead>
+        <tbody id="gift-subs-table-body">
+          <tr>
+            <td colspan="5" style="text-align: center;">Loading gift subscriptions...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  
+  <footer>
+    <p>Twitch Bit Donation Tracker for girl_dm_ &copy; 2023</p>
+  </footer>
+  
+  <script src="/gift-subs.js"></script>
+</body>
+</html>
