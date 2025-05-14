@@ -9,6 +9,41 @@ document.addEventListener('DOMContentLoaded', function() {
   const spinAlertMessage = document.getElementById('spin-alert-message');
   const spinner = document.getElementById('spinner');
   
+  // Function to update spin status via API
+  window.updateSpinStatus = function(timestamp, isChecked) {
+    fetch('/api/donations/update-spin', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        timestamp: timestamp,
+        spinTriggered: isChecked
+      })
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        console.log('Spin status updated successfully');
+        updateStats(data.stats);
+        
+        // If spin was triggered, show the spin alert
+        if (isChecked) {
+          // Find the donation in the updated list
+          const donation = data.donations.find(d => d.timestamp === timestamp);
+          if (donation) {
+            showSpinAlert(donation);
+          }
+        }
+      } else {
+        console.error('Error updating spin status:', data.error);
+      }
+    })
+    .catch(error => {
+      console.error('Failed to update spin status:', error);
+    });
+  };
+  
   // Stats elements
   const totalDonations = document.getElementById('total-donations');
   const totalBits = document.getElementById('total-bits');
@@ -28,13 +63,31 @@ document.addEventListener('DOMContentLoaded', function() {
     // Format the timestamp
     const timestamp = new Date(donation.timestamp);
     
+    // Create a unique ID for the checkbox based on the timestamp
+    const checkboxId = `spin-checkbox-${donation.timestamp.replace(/[^a-zA-Z0-9]/g, '')}`;
+    
     tr.innerHTML = `
       <td>${dateFormatter.format(timestamp)}</td>
       <td>${escapeHtml(donation.username)}</td>
       <td>${donation.bits}</td>
       <td>${escapeHtml(donation.message)}</td>
-      <td class="${donation.spinTriggered ? 'spin-triggered' : ''}">${donation.spinTriggered ? 'YES' : 'NO'}</td>
+      <td class="${donation.spinTriggered ? 'spin-triggered' : ''}">
+        <input type="checkbox" id="${checkboxId}" class="spin-checkbox" 
+               data-timestamp="${donation.timestamp}" 
+               ${donation.spinTriggered ? 'checked' : ''}>
+        <label for="${checkboxId}">Spin</label>
+      </td>
     `;
+    
+    // Add event listener to the checkbox after the row is created
+    setTimeout(() => {
+      const checkbox = document.getElementById(checkboxId);
+      if (checkbox) {
+        checkbox.addEventListener('change', function() {
+          updateSpinStatus(donation.timestamp, this.checked);
+        });
+      }
+    }, 0);
     
     return tr;
   }

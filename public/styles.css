@@ -99,6 +99,20 @@ tr:hover {
   font-weight: 700;
 }
 
+.spin-checkbox {
+  margin-right: 5px;
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+  vertical-align: middle;
+}
+
+.spin-checkbox + label {
+  cursor: pointer;
+  vertical-align: middle;
+  display: inline-block;
+}
+
 .button {
   display: inline-block;
   background-color: var(--primary-color);
