@@ -9,7 +9,10 @@ const socketIo = require('socket.io');
 // Configuration
 const CHANNEL_NAME = 'girl_dm_';
 const BIT_THRESHOLD_FOR_SPIN = 1000; // Bits needed for a spin
+const GIFT_SUB_THRESHOLD = 3; // Number of gift subs needed to trigger a spin
 const CSV_PATH = path.join(__dirname, 'bit_donations.csv');
+const GIFT_SUBS_CSV_PATH = path.join(__dirname, 'gift_subs.csv'); // Track gift subs
+const SPIN_COMMANDS_CSV_PATH = path.join(__dirname, 'spin_commands.csv'); // Track !spin usage
 const RECENT_DONATIONS_LIMIT = 10; // Number of recent donations to display
 
 // Get Twitch credentials from environment variables
@@ -22,12 +25,27 @@ const server = http.createServer(app);
 const io = socketIo(server);
 const port = process.env.PORT || 5000; // Use port 5000 as required
 
-// Initialize CSV file if it doesn't exist
+// Initialize CSV files if they don't exist
 function initializeCSV() {
+  // Bits donations CSV
   if (!fs.existsSync(CSV_PATH)) {
     const header = 'Timestamp,Username,Bits,Message,SpinTriggered\n';
     fs.writeFileSync(CSV_PATH, header);
-    console.log('CSV file created successfully!');
+    console.log('Bits donations CSV file created successfully!');
+  }
+  
+  // Gift subs CSV
+  if (!fs.existsSync(GIFT_SUBS_CSV_PATH)) {
+    const header = 'Timestamp,Username,SubCount,RecipientUsernames,SpinTriggered\n';
+    fs.writeFileSync(GIFT_SUBS_CSV_PATH, header);
+    console.log('Gift subs CSV file created successfully!');
+  }
+  
+  // Spin commands CSV
+  if (!fs.existsSync(SPIN_COMMANDS_CSV_PATH)) {
+    const header = 'Timestamp,Username,Command\n';
+    fs.writeFileSync(SPIN_COMMANDS_CSV_PATH, header);
+    console.log('Spin commands CSV file created successfully!');
   }
 }
 
@@ -90,6 +108,240 @@ function getRecentDonations() {
   } catch (error) {
     console.error('Error reading donation history:', error);
     return [];
+  }
+}
+
+// Record gift subs to CSV
+function recordGiftSubs(username, subCount, recipients, spinTriggered) {
+  const timestamp = new Date().toISOString();
+  // Format recipients as a comma-separated list inside quotes
+  const recipientsStr = recipients && recipients.length > 0 
+    ? `"${recipients.join(', ')}"`
+    : '""';
+  
+  const newRow = `${timestamp},"${username}",${subCount},${recipientsStr},${spinTriggered ? 'YES' : 'NO'}\n`;
+  
+  fs.appendFileSync(GIFT_SUBS_CSV_PATH, newRow);
+  console.log(`Recorded ${subCount} gift subs from ${username}`);
+  
+  // Send real-time update to connected clients
+  const giftSubData = {
+    timestamp: timestamp,
+    username: username,
+    subCount: subCount,
+    recipients: recipients || [],
+    spinTriggered: spinTriggered
+  };
+  io.emit('new-gift-sub', giftSubData);
+  
+  if (spinTriggered) {
+    io.emit('spin-alert', {
+      timestamp: timestamp,
+      username: username,
+      bits: 0, // No bits for gift subs
+      message: `Gift subscriptions x${subCount}`,
+      spinTriggered: true,
+      isGiftSub: true,
+      subCount: subCount
+    });
+  }
+}
+
+// Record spin command to CSV
+function recordSpinCommand(username, command) {
+  const timestamp = new Date().toISOString();
+  const newRow = `${timestamp},"${username}","${command}"\n`;
+  
+  fs.appendFileSync(SPIN_COMMANDS_CSV_PATH, newRow);
+  console.log(`Recorded !spin command from ${username}`);
+  
+  // Send real-time update to connected clients
+  const commandData = {
+    timestamp: timestamp,
+    username: username,
+    command: command
+  };
+  io.emit('new-spin-command', commandData);
+}
+
+// Get recent gift subs
+function getRecentGiftSubs() {
+  if (!fs.existsSync(GIFT_SUBS_CSV_PATH)) {
+    return [];
+  }
+  
+  try {
+    const fileContent = fs.readFileSync(GIFT_SUBS_CSV_PATH, 'utf8');
+    const lines = fileContent.split('\n').filter(line => line.trim() !== '');
+    
+    // Skip header and get the most recent gift subs
+    const giftSubs = [];
+    const dataLines = lines.slice(1).reverse().slice(0, RECENT_DONATIONS_LIMIT);
+    
+    dataLines.forEach(line => {
+      // Parse CSV line - properly handling quoted fields that may contain commas
+      const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
+      const parts = line.split(regex);
+      
+      if (parts.length >= 5) {
+        const recipients = parts[3].replace(/"/g, '').split(', ').filter(r => r.trim() !== '');
+        giftSubs.push({
+          timestamp: parts[0],
+          username: parts[1].replace(/"/g, ''),
+          subCount: parseInt(parts[2]),
+          recipients: recipients,
+          spinTriggered: parts[4].trim() === 'YES'
+        });
+      }
+    });
+    
+    return giftSubs;
+  } catch (error) {
+    console.error('Error reading gift subs history:', error);
+    return [];
+  }
+}
+
+// Get gift sub statistics
+function getGiftSubStats() {
+  if (!fs.existsSync(GIFT_SUBS_CSV_PATH)) {
+    return {
+      totalGiftSubs: 0,
+      totalSpins: 0,
+      topGifter: 'None'
+    };
+  }
+  
+  try {
+    const fileContent = fs.readFileSync(GIFT_SUBS_CSV_PATH, 'utf8');
+    const lines = fileContent.split('\n').filter(line => line.trim() !== '');
+    
+    // Skip header
+    const dataLines = lines.slice(1);
+    
+    let totalGiftSubs = 0;
+    let totalSpins = 0;
+    const gifterMap = {};
+    
+    dataLines.forEach(line => {
+      const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
+      const parts = line.split(regex);
+      
+      if (parts.length >= 5) {
+        const username = parts[1].replace(/"/g, '');
+        const subCount = parseInt(parts[2]);
+        const spinTriggered = parts[4].trim() === 'YES';
+        
+        totalGiftSubs += subCount;
+        if (spinTriggered) totalSpins++;
+        
+        if (gifterMap[username]) {
+          gifterMap[username] += subCount;
+        } else {
+          gifterMap[username] = subCount;
+        }
+      }
+    });
+    
+    // Find top gifter
+    let topGifter = 'None';
+    let maxSubs = 0;
+    
+    Object.keys(gifterMap).forEach(username => {
+      if (gifterMap[username] > maxSubs) {
+        maxSubs = gifterMap[username];
+        topGifter = username;
+      }
+    });
+    
+    return {
+      totalGiftSubs: totalGiftSubs,
+      totalSpins: totalSpins,
+      topGifter: topGifter,
+      topGifterSubs: maxSubs
+    };
+  } catch (error) {
+    console.error('Error calculating gift sub stats:', error);
+    return {
+      totalGiftSubs: 0,
+      totalSpins: 0,
+      topGifter: 'None'
+    };
+  }
+}
+
+// Get recent spin commands
+function getRecentSpinCommands() {
+  if (!fs.existsSync(SPIN_COMMANDS_CSV_PATH)) {
+    return [];
+  }
+  
+  try {
+    const fileContent = fs.readFileSync(SPIN_COMMANDS_CSV_PATH, 'utf8');
+    const lines = fileContent.split('\n').filter(line => line.trim() !== '');
+    
+    // Skip header and get the most recent commands
+    const commands = [];
+    const dataLines = lines.slice(1).reverse().slice(0, RECENT_DONATIONS_LIMIT);
+    
+    dataLines.forEach(line => {
+      // Parse CSV line - properly handling quoted fields that may contain commas
+      const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
+      const parts = line.split(regex);
+      
+      if (parts.length >= 3) {
+        commands.push({
+          timestamp: parts[0],
+          username: parts[1].replace(/"/g, ''),
+          command: parts[2].replace(/"/g, '')
+        });
+      }
+    });
+    
+    return commands;
+  } catch (error) {
+    console.error('Error reading spin commands history:', error);
+    return [];
+  }
+}
+
+// Get spin command statistics
+function getSpinCommandStats() {
+  if (!fs.existsSync(SPIN_COMMANDS_CSV_PATH)) {
+    return {
+      totalCommands: 0,
+      uniqueUsers: 0
+    };
+  }
+  
+  try {
+    const fileContent = fs.readFileSync(SPIN_COMMANDS_CSV_PATH, 'utf8');
+    const lines = fileContent.split('\n').filter(line => line.trim() !== '');
+    
+    // Skip header
+    const dataLines = lines.slice(1);
+    const uniqueUsers = new Set();
+    
+    dataLines.forEach(line => {
+      const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
+      const parts = line.split(regex);
+      
+      if (parts.length >= 3) {
+        const username = parts[1].replace(/"/g, '');
+        uniqueUsers.add(username);
+      }
+    });
+    
+    return {
+      totalCommands: dataLines.length,
+      uniqueUsers: uniqueUsers.size
+    };
+  } catch (error) {
+    console.error('Error calculating spin command stats:', error);
+    return {
+      totalCommands: 0,
+      uniqueUsers: 0
+    };
   }
 }
 
@@ -199,6 +451,14 @@ app.get('/donations', (req, res) => {
   res.sendFile(path.join(__dirname, 'views', 'donations.html'));
 });
 
+app.get('/gift-subs', (req, res) => {
+  res.sendFile(path.join(__dirname, 'views', 'gift-subs.html'));
+});
+
+app.get('/spin-commands', (req, res) => {
+  res.sendFile(path.join(__dirname, 'views', 'spin-commands.html'));
+});
+
 app.get('/api/donations', (req, res) => {
   const recentDonations = getRecentDonations();
   const stats = getDonationStats();
@@ -279,6 +539,48 @@ app.get('/api/donations/download', (req, res) => {
   }
 });
 
+// API endpoints for gift subs
+app.get('/api/gift-subs', (req, res) => {
+  const recentGiftSubs = getRecentGiftSubs();
+  const stats = getGiftSubStats();
+  res.json({
+    giftSubs: recentGiftSubs,
+    stats: stats
+  });
+});
+
+app.get('/api/gift-subs/download', (req, res) => {
+  if (fs.existsSync(GIFT_SUBS_CSV_PATH)) {
+    const data = fs.readFileSync(GIFT_SUBS_CSV_PATH, 'utf8');
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename=gift_subs.csv');
+    res.send(data);
+  } else {
+    res.status(404).send('No gift subs recorded yet');
+  }
+});
+
+// API endpoints for spin commands
+app.get('/api/spin-commands', (req, res) => {
+  const recentCommands = getRecentSpinCommands();
+  const stats = getSpinCommandStats();
+  res.json({
+    commands: recentCommands,
+    stats: stats
+  });
+});
+
+app.get('/api/spin-commands/download', (req, res) => {
+  if (fs.existsSync(SPIN_COMMANDS_CSV_PATH)) {
+    const data = fs.readFileSync(SPIN_COMMANDS_CSV_PATH, 'utf8');
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename=spin_commands.csv');
+    res.send(data);
+  } else {
+    res.status(404).send('No spin commands recorded yet');
+  }
+});
+
 // Socket.io connection
 io.on('connection', (socket) => {
   console.log('New client connected');
@@ -286,9 +588,18 @@ io.on('connection', (socket) => {
   // Send initial data to the connected client
   const recentDonations = getRecentDonations();
   const stats = getDonationStats();
+  const recentGiftSubs = getRecentGiftSubs();
+  const giftSubStats = getGiftSubStats();
+  const recentSpinCommands = getRecentSpinCommands();
+  const spinCommandStats = getSpinCommandStats();
+  
   socket.emit('initial-data', {
     donations: recentDonations,
-    stats: stats
+    stats: stats,
+    giftSubs: recentGiftSubs,
+    giftSubStats: giftSubStats,
+    spinCommands: recentSpinCommands,
+    spinCommandStats: spinCommandStats
   });
   
   socket.on('disconnect', () => {
@@ -321,6 +632,46 @@ client.on('cheer', (channel, userstate, message) => {
   // Alert for spin if threshold met for this individual donation
   if (spinTriggered) {
     console.log(`🎉 SPIN ALERT! ${username} donated ${bits} bits (over the ${BIT_THRESHOLD_FOR_SPIN} threshold)!`);
+  }
+});
+
+// Listen for gift sub events
+client.on('submysterygift', (channel, username, subCount, methods, userstate) => {
+  // Get recipients if available (not always present in the event)
+  const recipients = [];
+  
+  // Check if gift sub count meets or exceeds the threshold
+  const spinTriggered = subCount >= GIFT_SUB_THRESHOLD;
+  
+  console.log(`${username} gifted ${subCount} subs!`);
+  
+  // Record to gift subs CSV
+  recordGiftSubs(username, subCount, recipients, spinTriggered);
+  
+  // Alert for spin if threshold met
+  if (spinTriggered) {
+    console.log(`🎉 SPIN ALERT! ${username} gifted ${subCount} subs (over the ${GIFT_SUB_THRESHOLD} threshold)!`);
+  }
+});
+
+// Listen for individual gift sub events to collect recipient names
+client.on('subgift', (channel, username, streakMonths, recipient, methods, userstate) => {
+  // We don't need to trigger anything here, just for tracking recipients
+  console.log(`${username} gifted a sub to ${recipient}.`);
+});
+
+// Listen for chat messages to track !spin command
+client.on('message', (channel, userstate, message, self) => {
+  // Ignore messages from the bot itself
+  if (self) return;
+  
+  // Check if message starts with !spin
+  if (message.trim().toLowerCase().startsWith('!spin')) {
+    const username = userstate.username || 'anonymous';
+    console.log(`${username} used the !spin command: ${message}`);
+    
+    // Record the command usage
+    recordSpinCommand(username, message.trim());
   }
 });
 
