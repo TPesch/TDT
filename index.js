@@ -8,12 +8,67 @@ const socketIo = require('socket.io');
 
 // Configuration
 const CHANNEL_NAME = 'girl_dm_';
-const BIT_THRESHOLD_FOR_SPIN = 1000; // Bits needed for a spin
-const GIFT_SUB_THRESHOLD = 3; // Number of gift subs needed to trigger a spin
+const CONFIG_PATH = path.join(__dirname, 'config.json');
+
+// Default thresholds that can be adjusted 
+let BIT_THRESHOLD_FOR_SPIN = 1000; // Bits needed for a spin
+let GIFT_SUB_THRESHOLD = 3; // Number of gift subs needed to trigger a spin
+
+// File paths
 const CSV_PATH = path.join(__dirname, 'bit_donations.csv');
 const GIFT_SUBS_CSV_PATH = path.join(__dirname, 'gift_subs.csv'); // Track gift subs
 const SPIN_COMMANDS_CSV_PATH = path.join(__dirname, 'spin_commands.csv'); // Track !spin usage
 const RECENT_DONATIONS_LIMIT = 10; // Number of recent donations to display
+
+// Load configuration from file if it exists
+function loadConfig() {
+  try {
+    if (fs.existsSync(CONFIG_PATH)) {
+      const configData = fs.readFileSync(CONFIG_PATH, 'utf8');
+      const config = JSON.parse(configData);
+      
+      if (config.bitThreshold) BIT_THRESHOLD_FOR_SPIN = config.bitThreshold;
+      if (config.giftSubThreshold) GIFT_SUB_THRESHOLD = config.giftSubThreshold;
+      
+      console.log(`Loaded configuration: Bit threshold = ${BIT_THRESHOLD_FOR_SPIN}, Gift sub threshold = ${GIFT_SUB_THRESHOLD}`);
+    } else {
+      // Create default config file if it doesn't exist
+      const defaultConfig = {
+        bitThreshold: BIT_THRESHOLD_FOR_SPIN,
+        giftSubThreshold: GIFT_SUB_THRESHOLD
+      };
+      fs.writeFileSync(CONFIG_PATH, JSON.stringify(defaultConfig, null, 2));
+      console.log('Created default configuration file');
+    }
+  } catch (error) {
+    console.error('Error loading configuration:', error);
+  }
+}
+
+// Save current thresholds to configuration file
+function saveConfig(bitThreshold, giftSubThreshold) {
+  try {
+    const config = {
+      bitThreshold: bitThreshold || BIT_THRESHOLD_FOR_SPIN,
+      giftSubThreshold: giftSubThreshold || GIFT_SUB_THRESHOLD
+    };
+    
+    fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+    console.log(`Saved configuration: Bit threshold = ${config.bitThreshold}, Gift sub threshold = ${config.giftSubThreshold}`);
+    
+    // Update current thresholds
+    BIT_THRESHOLD_FOR_SPIN = config.bitThreshold;
+    GIFT_SUB_THRESHOLD = config.giftSubThreshold;
+    
+    return true;
+  } catch (error) {
+    console.error('Error saving configuration:', error);
+    return false;
+  }
+}
+
+// Load configuration on startup
+loadConfig();
 
 // Get Twitch credentials from environment variables
 const TWITCH_USERNAME = process.env.TWITCH_USERNAME || 'justinfan12345'; // Anonymous fallback
@@ -459,6 +514,10 @@ app.get('/spin-commands', (req, res) => {
   res.sendFile(path.join(__dirname, 'views', 'spin-commands.html'));
 });
 
+app.get('/settings', (req, res) => {
+  res.sendFile(path.join(__dirname, 'views', 'settings.html'));
+});
+
 app.get('/api/donations', (req, res) => {
   const recentDonations = getRecentDonations();
   const stats = getDonationStats();
@@ -546,6 +605,55 @@ app.get('/api/gift-subs', (req, res) => {
   res.json({
     giftSubs: recentGiftSubs,
     giftSubStats: stats
+  });
+});
+
+// API endpoint to update thresholds
+app.post('/api/config/update-thresholds', (req, res) => {
+  const { bitThreshold, giftSubThreshold } = req.body;
+  
+  if (!bitThreshold && !giftSubThreshold) {
+    return res.status(400).json({ error: 'At least one threshold value is required' });
+  }
+  
+  try {
+    // Update configuration
+    const updatedConfig = saveConfig(
+      bitThreshold || BIT_THRESHOLD_FOR_SPIN,
+      giftSubThreshold || GIFT_SUB_THRESHOLD
+    );
+    
+    if (updatedConfig) {
+      console.log(`Thresholds updated via API: bits=${BIT_THRESHOLD_FOR_SPIN}, subs=${GIFT_SUB_THRESHOLD}`);
+      
+      // Send updated thresholds to all clients
+      io.emit('thresholds-update', {
+        bitThreshold: BIT_THRESHOLD_FOR_SPIN,
+        giftSubThreshold: GIFT_SUB_THRESHOLD
+      });
+      
+      return res.json({
+        success: true,
+        message: 'Thresholds updated successfully',
+        config: {
+          bitThreshold: BIT_THRESHOLD_FOR_SPIN,
+          giftSubThreshold: GIFT_SUB_THRESHOLD
+        }
+      });
+    } else {
+      return res.status(500).json({ error: 'Failed to update thresholds' });
+    }
+  } catch (error) {
+    console.error('Error updating thresholds via API:', error);
+    res.status(500).json({ error: 'Failed to update thresholds' });
+  }
+});
+
+// API endpoint to get current thresholds
+app.get('/api/config/thresholds', (req, res) => {
+  res.json({
+    bitThreshold: BIT_THRESHOLD_FOR_SPIN,
+    giftSubThreshold: GIFT_SUB_THRESHOLD
   });
 });
 
@@ -765,18 +873,304 @@ client.on('subgift', (channel, username, streakMonths, recipient, methods, users
   console.log(`${username} gifted a sub to ${recipient}.`);
 });
 
+// Find most recent donation for a username
+function findRecentDonationByUsername(targetUsername) {
+  if (!fs.existsSync(CSV_PATH)) {
+    return null;
+  }
+  
+  try {
+    const fileContent = fs.readFileSync(CSV_PATH, 'utf8');
+    const lines = fileContent.split('\n').filter(line => line.trim() !== '');
+    
+    // Skip header
+    const dataLines = lines.slice(1).reverse(); // Most recent first
+    
+    // Try to find the donation by username
+    for (const line of dataLines) {
+      const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
+      const parts = line.split(regex);
+      
+      if (parts.length >= 5) {
+        const username = parts[1].replace(/"/g, '').toLowerCase();
+        
+        // Check if this username matches our target (case insensitive)
+        if (username === targetUsername.toLowerCase()) {
+          return {
+            timestamp: parts[0],
+            username: parts[1].replace(/"/g, ''),
+            bits: parseInt(parts[2]),
+            message: parts[3].replace(/"/g, ''),
+            spinTriggered: parts[4].trim() === 'YES'
+          };
+        }
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error finding donation by username:', error);
+    return null;
+  }
+}
+
+// Find most recent gift sub for a username
+function findRecentGiftSubByUsername(targetUsername) {
+  if (!fs.existsSync(GIFT_SUBS_CSV_PATH)) {
+    return null;
+  }
+  
+  try {
+    const fileContent = fs.readFileSync(GIFT_SUBS_CSV_PATH, 'utf8');
+    const lines = fileContent.split('\n').filter(line => line.trim() !== '');
+    
+    // Skip header
+    const dataLines = lines.slice(1).reverse(); // Most recent first
+    
+    // Try to find the gift sub by username
+    for (const line of dataLines) {
+      const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
+      const parts = line.split(regex);
+      
+      if (parts.length >= 5) {
+        const username = parts[1].replace(/"/g, '').toLowerCase();
+        
+        // Check if this username matches our target (case insensitive)
+        if (username === targetUsername.toLowerCase()) {
+          const recipients = parts[3].replace(/"/g, '').split(', ').filter(r => r.trim() !== '');
+          return {
+            timestamp: parts[0],
+            username: parts[1].replace(/"/g, ''),
+            subCount: parseInt(parts[2]),
+            recipients: recipients,
+            spinTriggered: parts[4].trim() === 'YES'
+          };
+        }
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error finding gift sub by username:', error);
+    return null;
+  }
+}
+
+// Update spin triggered status for a donation
+function updateDonationSpinStatus(timestamp, spinTriggered) {
+  if (!fs.existsSync(CSV_PATH)) {
+    return false;
+  }
+  
+  try {
+    const fileContent = fs.readFileSync(CSV_PATH, 'utf8');
+    const lines = fileContent.split('\n').filter(line => line.trim() !== '');
+    const header = lines[0];
+    const dataLines = lines.slice(1);
+    
+    // Find and update the line with the matching timestamp
+    let updated = false;
+    const updatedLines = dataLines.map(line => {
+      const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
+      const parts = line.split(regex);
+      
+      if (parts.length >= 5 && parts[0].trim() === timestamp.trim()) {
+        parts[4] = spinTriggered ? 'YES' : 'NO';
+        updated = true;
+        return parts.join(',');
+      }
+      return line;
+    });
+    
+    if (!updated) {
+      return false;
+    }
+    
+    // Write back to file
+    const updatedContent = [header, ...updatedLines].join('\n');
+    fs.writeFileSync(CSV_PATH, updatedContent);
+    return true;
+  } catch (error) {
+    console.error('Error updating donation spin status:', error);
+    return false;
+  }
+}
+
+// Update spin triggered status for a gift sub
+function updateGiftSubSpinStatus(timestamp, spinTriggered) {
+  if (!fs.existsSync(GIFT_SUBS_CSV_PATH)) {
+    return false;
+  }
+  
+  try {
+    const fileContent = fs.readFileSync(GIFT_SUBS_CSV_PATH, 'utf8');
+    const lines = fileContent.split('\n').filter(line => line.trim() !== '');
+    const header = lines[0];
+    const dataLines = lines.slice(1);
+    
+    // Find and update the line with the matching timestamp
+    let updated = false;
+    const updatedLines = dataLines.map(line => {
+      const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
+      const parts = line.split(regex);
+      
+      if (parts.length >= 5 && parts[0].trim() === timestamp.trim()) {
+        parts[4] = spinTriggered ? 'YES' : 'NO';
+        updated = true;
+        return parts.join(',');
+      }
+      return line;
+    });
+    
+    if (!updated) {
+      return false;
+    }
+    
+    // Write back to file
+    const updatedContent = [header, ...updatedLines].join('\n');
+    fs.writeFileSync(GIFT_SUBS_CSV_PATH, updatedContent);
+    return true;
+  } catch (error) {
+    console.error('Error updating gift sub spin status:', error);
+    return false;
+  }
+}
+
+// Process a !spin command for a user
+function processSpinCommand(modUsername, message) {
+  // Extract the target username from the message
+  const match = message.match(/!spin\s+@?(\w+)/i);
+  
+  if (!match || !match[1]) {
+    console.log(`Invalid spin command format from ${modUsername}: ${message}`);
+    return {
+      success: false,
+      message: 'Invalid command format. Use: !spin @username'
+    };
+  }
+  
+  const targetUsername = match[1];
+  console.log(`${modUsername} used !spin command for ${targetUsername}`);
+  
+  // First, try to find a bit donation for this user
+  const donation = findRecentDonationByUsername(targetUsername);
+  
+  if (donation) {
+    // Only update if it's not already marked as triggered
+    if (!donation.spinTriggered) {
+      const updated = updateDonationSpinStatus(donation.timestamp, true);
+      
+      if (updated) {
+        console.log(`Marked bit donation from ${targetUsername} for spin`);
+        
+        // Send spin alert to all clients
+        io.emit('spin-alert', {
+          timestamp: donation.timestamp,
+          username: donation.username,
+          bits: donation.bits,
+          message: donation.message,
+          spinTriggered: true
+        });
+        
+        return {
+          success: true,
+          type: 'bit_donation',
+          donation: donation
+        };
+      }
+    } else {
+      console.log(`Donation from ${targetUsername} was already marked for spin`);
+    }
+  }
+  
+  // If no bit donation, try to find a gift sub for this user
+  const giftSub = findRecentGiftSubByUsername(targetUsername);
+  
+  if (giftSub) {
+    // Only update if it's not already marked as triggered
+    if (!giftSub.spinTriggered) {
+      const updated = updateGiftSubSpinStatus(giftSub.timestamp, true);
+      
+      if (updated) {
+        console.log(`Marked gift sub from ${targetUsername} for spin`);
+        
+        // Send spin alert to all clients
+        io.emit('spin-alert', {
+          timestamp: giftSub.timestamp,
+          username: giftSub.username,
+          bits: 0,
+          message: `Gift subscriptions x${giftSub.subCount}`,
+          spinTriggered: true,
+          isGiftSub: true,
+          subCount: giftSub.subCount
+        });
+        
+        return {
+          success: true,
+          type: 'gift_sub',
+          giftSub: giftSub
+        };
+      }
+    } else {
+      console.log(`Gift sub from ${targetUsername} was already marked for spin`);
+    }
+  }
+  
+  // No valid donation or gift sub found for the user
+  console.log(`No recent donations or gift subs found for ${targetUsername}`);
+  return {
+    success: false,
+    message: `No recent donations or gift subs found for ${targetUsername}`
+  };
+}
+
 // Listen for chat messages to track !spin command
 client.on('message', (channel, userstate, message, self) => {
   // Ignore messages from the bot itself
   if (self) return;
   
+  const username = userstate.username || 'anonymous';
+  
   // Check if message starts with !spin
   if (message.trim().toLowerCase().startsWith('!spin')) {
-    const username = userstate.username || 'anonymous';
-    console.log(`${username} used the !spin command: ${message}`);
-    
-    // Record the command usage
+    // Record the command usage regardless of format
     recordSpinCommand(username, message.trim());
+    
+    // Check if this is a mod or broadcaster
+    const isMod = userstate.mod || userstate.badges?.broadcaster === '1';
+    
+    // If user is a mod, try to process the spin command
+    if (isMod) {
+      const result = processSpinCommand(username, message.trim());
+      
+      // If the command was processed successfully, we can broadcast a confirmation
+      if (result.success) {
+        // We already send the spin alert in the processSpinCommand function
+        console.log(`Mod ${username} successfully processed spin for a user`);
+      }
+    }
+  } else if (message.trim().toLowerCase().startsWith('!setthreshold')) {
+    // Additional command for mods to set thresholds
+    const isMod = userstate.mod || userstate.badges?.broadcaster === '1';
+    
+    if (isMod) {
+      // Try to parse threshold values
+      const match = message.match(/!setthreshold\s+bits=(\d+)\s+subs=(\d+)/i);
+      
+      if (match && match[1] && match[2]) {
+        const bitThreshold = parseInt(match[1]);
+        const subThreshold = parseInt(match[2]);
+        
+        // Update configuration
+        const saved = saveConfig(bitThreshold, subThreshold);
+        
+        if (saved) {
+          console.log(`Mod ${username} updated thresholds: bits=${bitThreshold}, subs=${subThreshold}`);
+        }
+      } else {
+        console.log(`Invalid threshold format from ${username}: ${message}`);
+      }
+    }
   }
 });
 

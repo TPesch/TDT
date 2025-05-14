@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Settings - Twitch Bit Tracker - girl_dm_</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+  <header>
+    <h1><i class="fas fa-chart-bar"></i> Twitch Bit Donation Tracker</h1>
+    <p>Channel: girl_dm_</p>
+  </header>
+  
+  <div class="container">
+    <div class="nav-links">
+      <a href="/" class="button button-secondary">Dashboard</a>
+      <a href="/donations" class="button button-secondary">Bit Donations</a>
+      <a href="/gift-subs" class="button button-secondary">Gift Subs</a>
+      <a href="/spin-commands" class="button button-secondary">!spin Commands</a>
+      <a href="/settings" class="button">Settings</a>
+      <div class="dropdown">
+        <button class="button button-secondary">Download CSV <i class="fas fa-caret-down"></i></button>
+        <div class="dropdown-content">
+          <a href="/api/donations/download">Bit Donations</a>
+          <a href="/api/gift-subs/download">Gift Subs</a>
+          <a href="/api/spin-commands/download">!spin Commands</a>
+          <a href="/api/combined/download">Combined Data</a>
+        </div>
+      </div>
+    </div>
+    
+    <div class="status-panel">
+      <h2><i class="fas fa-cog"></i> Tracker Settings</h2>
+      <p>Configure thresholds and other settings for the Twitch Bit Tracker.</p>
+      
+      <div class="settings-form">
+        <div class="setting-group">
+          <h3>Donation Thresholds</h3>
+          <div class="setting-item">
+            <label for="bit-threshold">Bit Donation Threshold:</label>
+            <div class="input-group">
+              <input type="number" id="bit-threshold" min="1" step="1" value="1000">
+              <span class="input-suffix">bits</span>
+            </div>
+            <p class="setting-desc">Minimum bits needed to trigger a spin</p>
+          </div>
+          <div class="setting-item">
+            <label for="gift-sub-threshold">Gift Sub Threshold:</label>
+            <div class="input-group">
+              <input type="number" id="gift-sub-threshold" min="1" step="1" value="3">
+              <span class="input-suffix">subs</span>
+            </div>
+            <p class="setting-desc">Minimum gift subs needed to trigger a spin</p>
+          </div>
+        </div>
+        
+        <div class="setting-group">
+          <h3>Moderator Commands</h3>
+          <div class="setting-info">
+            <p><code>!spin @username</code> - Mark a user's donation for a spin</p>
+            <p><code>!setthreshold bits=X subs=Y</code> - Update thresholds via chat</p>
+          </div>
+        </div>
+        
+        <button id="save-settings" class="button">Save Settings</button>
+        <p id="settings-status" class="settings-status"></p>
+      </div>
+    </div>
+  </div>
+  
+  <footer>
+    <p>Twitch Bit Donation Tracker for girl_dm_ &copy; 2023</p>
+  </footer>
+  
+  <script src="/settings.js"></script>
+</body>
+</html>
