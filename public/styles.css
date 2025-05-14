@@ -1,0 +1,184 @@
+:root {
+  --primary-color: #9146ff; /* Twitch purple */
+  --secondary-color: #772ce8;
+  --text-color: #efeff1;
+  --dark-bg: #18181b;
+  --panel-bg: #1f1f23;
+  --highlight: #bf94ff;
+  --success: #00b173;
+  --danger: #e91916;
+}
+
+body {
+  font-family: 'Roboto', 'Helvetica Neue', sans-serif;
+  margin: 0;
+  padding: 0;
+  line-height: 1.6;
+  background-color: var(--dark-bg);
+  color: var(--text-color);
+}
+
+.container {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+header {
+  background-color: var(--primary-color);
+  color: white;
+  padding: 15px 0;
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+h1, h2, h3 {
+  margin-top: 0;
+  font-weight: 500;
+}
+
+.status-panel {
+  background-color: var(--panel-bg);
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 30px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.status-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+
+.status-item {
+  background-color: rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+  padding: 15px;
+  text-align: center;
+}
+
+.status-value {
+  font-size: 24px;
+  font-weight: 700;
+  margin-top: 5px;
+  color: var(--highlight);
+}
+
+.donation-list {
+  background-color: var(--panel-bg);
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 15px;
+}
+
+th, td {
+  padding: 12px 15px;
+  text-align: left;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+th {
+  background-color: rgba(0, 0, 0, 0.2);
+  color: var(--highlight);
+  font-weight: 500;
+}
+
+tr:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.spin-triggered {
+  color: var(--success);
+  font-weight: 700;
+}
+
+.button {
+  display: inline-block;
+  background-color: var(--primary-color);
+  color: white;
+  padding: 10px 20px;
+  border-radius: 4px;
+  text-decoration: none;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.button:hover {
+  background-color: var(--secondary-color);
+}
+
+.button-secondary {
+  background-color: #333;
+}
+
+.button-secondary:hover {
+  background-color: #444;
+}
+
+.nav-links {
+  margin-bottom: 20px;
+  display: flex;
+  gap: 10px;
+}
+
+footer {
+  margin-top: 40px;
+  text-align: center;
+  padding: 20px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 14px;
+}
+
+.active-indicator {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  background-color: var(--success);
+  border-radius: 50%;
+  margin-right: 8px;
+}
+
+.spin-alert {
+  background-color: rgba(191, 148, 255, 0.15);
+  border-left: 4px solid var(--highlight);
+  padding: 15px;
+  margin: 20px 0;
+  border-radius: 0 4px 4px 0;
+  animation: pulse 2s infinite;
+  display: none;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(191, 148, 255, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(191, 148, 255, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(191, 148, 255, 0);
+  }
+}
+
+@media (max-width: 768px) {
+  .status-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  th, td {
+    padding: 8px 10px;
+  }
+  
+  .container {
+    padding: 10px;
+  }
+}
