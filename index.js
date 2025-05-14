@@ -549,6 +549,54 @@ app.get('/api/gift-subs', (req, res) => {
   });
 });
 
+// API endpoint to get combined data in a single CSV
+app.get('/api/combined/download', (req, res) => {
+  try {
+    // Check if all files exist
+    const bitDonationsExists = fs.existsSync(CSV_PATH);
+    const giftSubsExists = fs.existsSync(GIFT_SUBS_CSV_PATH);
+    const spinCommandsExists = fs.existsSync(SPIN_COMMANDS_CSV_PATH);
+    
+    if (!bitDonationsExists && !giftSubsExists && !spinCommandsExists) {
+      return res.status(404).send('No data recorded yet');
+    }
+    
+    // Create a combined CSV with sections
+    let combinedData = 'TWITCH BIT DONATION TRACKER - COMBINED DATA\n\n';
+    
+    // Add bit donations
+    if (bitDonationsExists) {
+      const bitData = fs.readFileSync(CSV_PATH, 'utf8');
+      combinedData += '### BIT DONATIONS ###\n';
+      combinedData += bitData + '\n\n';
+    }
+    
+    // Add gift subs
+    if (giftSubsExists) {
+      const giftData = fs.readFileSync(GIFT_SUBS_CSV_PATH, 'utf8');
+      combinedData += '### GIFT SUBSCRIPTIONS ###\n';
+      combinedData += giftData + '\n\n';
+    }
+    
+    // Add spin commands
+    if (spinCommandsExists) {
+      const commandData = fs.readFileSync(SPIN_COMMANDS_CSV_PATH, 'utf8');
+      combinedData += '### !SPIN COMMANDS ###\n';
+      combinedData += commandData + '\n\n';
+    }
+    
+    // Add timestamp
+    combinedData += `\nExported: ${new Date().toISOString()}`;
+    
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename=twitch_tracker_combined_data.csv');
+    res.send(combinedData);
+  } catch (error) {
+    console.error('Error generating combined CSV:', error);
+    res.status(500).send('Error generating combined CSV');
+  }
+});
+
 // API endpoint to update gift sub spin status
 app.post('/api/gift-subs/update-spin', (req, res) => {
   const { timestamp, spinTriggered } = req.body;

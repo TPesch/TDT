@@ -21,7 +21,15 @@
       <a href="/donations" class="button button-secondary">Bit Donations</a>
       <a href="/gift-subs" class="button button-secondary">Gift Subs</a>
       <a href="/spin-commands" class="button button-secondary">!spin Commands</a>
-      <a href="/api/donations/download" class="button button-secondary">Download CSV</a>
+      <div class="dropdown">
+        <button class="button button-secondary">Download CSV <i class="fas fa-caret-down"></i></button>
+        <div class="dropdown-content">
+          <a href="/api/donations/download">Bit Donations</a>
+          <a href="/api/gift-subs/download">Gift Subs</a>
+          <a href="/api/spin-commands/download">!spin Commands</a>
+          <a href="/api/combined/download">Combined Data</a>
+        </div>
+      </div>
     </div>
     
     <div class="status-panel">
