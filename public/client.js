@@ -44,11 +44,20 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   };
   
-  // Stats elements
+  // Stats elements - Bit donations
   const totalDonations = document.getElementById('total-donations');
   const totalBits = document.getElementById('total-bits');
   const totalSpins = document.getElementById('total-spins');
   const topDonator = document.getElementById('top-donator');
+  
+  // Stats elements - Gift subs
+  const totalGiftSubs = document.getElementById('total-gift-subs');
+  const giftSubSpins = document.getElementById('gift-sub-spins');
+  const topGifter = document.getElementById('top-gifter');
+  
+  // Stats elements - !spin commands
+  const totalCommands = document.getElementById('total-commands');
+  const uniqueUsers = document.getElementById('unique-users');
   
   // Localized date/time formatter
   const dateFormatter = new Intl.DateTimeFormat(navigator.language, {
@@ -99,16 +108,42 @@ document.addEventListener('DOMContentLoaded', function() {
     return div.innerHTML;
   }
   
-  // Update stats display
+  // Update bit donation stats display
   function updateStats(stats) {
     if (!stats) return;
     
-    totalDonations.textContent = stats.totalDonations || 0;
-    totalBits.textContent = stats.totalBits || 0;
-    totalSpins.textContent = stats.totalSpins || 0;
-    topDonator.textContent = stats.topDonator !== 'None' 
-      ? `${stats.topDonator} (${stats.topDonatorBits || 0} bits)` 
-      : 'None yet';
+    // Update bit donation stats if elements exist
+    if (totalDonations) totalDonations.textContent = stats.totalDonations || 0;
+    if (totalBits) totalBits.textContent = stats.totalBits || 0;
+    if (totalSpins) totalSpins.textContent = stats.totalSpins || 0;
+    if (topDonator) {
+      topDonator.textContent = stats.topDonator !== 'None' 
+        ? `${stats.topDonator} (${stats.topDonatorBits || 0} bits)` 
+        : 'None yet';
+    }
+  }
+  
+  // Update gift sub stats display
+  function updateGiftSubStats(stats) {
+    if (!stats) return;
+    
+    // Update gift sub stats if elements exist
+    if (totalGiftSubs) totalGiftSubs.textContent = stats.totalGiftSubs || 0;
+    if (giftSubSpins) giftSubSpins.textContent = stats.totalSpins || 0;
+    if (topGifter) {
+      topGifter.textContent = stats.topGifter !== 'None' 
+        ? `${stats.topGifter} (${stats.topGifterSubs || 0} subs)` 
+        : 'None yet';
+    }
+  }
+  
+  // Update spin command stats display
+  function updateSpinCommandStats(stats) {
+    if (!stats) return;
+    
+    // Update spin command stats if elements exist
+    if (totalCommands) totalCommands.textContent = stats.totalCommands || 0;
+    if (uniqueUsers) uniqueUsers.textContent = stats.uniqueUsers || 0;
   }
   
   // Update donations table
@@ -160,6 +195,10 @@ document.addEventListener('DOMContentLoaded', function() {
   socket.on('initial-data', function(data) {
     updateDonationsTable(data.donations);
     updateStats(data.stats);
+    
+    // Update gift sub stats and spin command stats on dashboard
+    if (data.giftSubStats) updateGiftSubStats(data.giftSubStats);
+    if (data.spinCommandStats) updateSpinCommandStats(data.spinCommandStats);
   });
   
   // New donation event
@@ -180,13 +219,35 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     }
     
-    // Update stats via API call
+    // Update bit donation stats via API call
     fetch('/api/donations')
       .then(response => response.json())
       .then(data => {
         updateStats(data.stats);
       })
-      .catch(error => console.error('Error fetching updated stats:', error));
+      .catch(error => console.error('Error fetching updated bit donation stats:', error));
+  });
+  
+  // New gift sub event
+  socket.on('new-gift-sub', function(giftSub) {
+    // Update gift sub stats via API call
+    fetch('/api/gift-subs')
+      .then(response => response.json())
+      .then(data => {
+        updateGiftSubStats(data.giftSubStats);
+      })
+      .catch(error => console.error('Error fetching updated gift sub stats:', error));
+  });
+  
+  // New spin command event
+  socket.on('new-spin-command', function(command) {
+    // Update spin command stats via API call
+    fetch('/api/spin-commands')
+      .then(response => response.json())
+      .then(data => {
+        updateSpinCommandStats(data.stats);
+      })
+      .catch(error => console.error('Error fetching updated spin command stats:', error));
   });
   
   // Spin alert event
