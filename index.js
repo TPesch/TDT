@@ -8,7 +8,7 @@ const socketIo = require('socket.io');
 
 // Configuration
 const CHANNEL_NAME = 'girl_dm_';
-const BIT_THRESHOLD_FOR_SPIN = 100; // Bits needed for a spin
+const BIT_THRESHOLD_FOR_SPIN = 1000; // Bits needed for a spin
 const CSV_PATH = path.join(__dirname, 'bit_donations.csv');
 const RECENT_DONATIONS_LIMIT = 10; // Number of recent donations to display
 
