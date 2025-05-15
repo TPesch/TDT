@@ -3,10 +3,13 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
+    "start": "node index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": ["twitch",
+    "donations",
+    "tracker"],
+  "author": "Tomas Pesch",
   "license": "ISC",
   "description": "",
   "dependencies": {
