@@ -657,6 +657,51 @@ app.get('/api/config/thresholds', (req, res) => {
   });
 });
 
+// Test endpoint to simulate mod !spin commands (for testing only)
+app.post('/api/test-command', (req, res) => {
+  const { message, username = 'TestMod' } = req.body;
+  
+  if (!message) {
+    return res.status(400).json({ error: 'Message is required' });
+  }
+  
+  console.log(`Test command received: ${message} from ${username}`);
+  
+  // Process the command as if it came from a mod
+  if (message.trim().toLowerCase().startsWith('!spin')) {
+    recordSpinCommand(username, message.trim());
+    const result = processSpinCommand(username, message.trim());
+    return res.json(result);
+  } else if (message.trim().toLowerCase().startsWith('!setthreshold')) {
+    // Try to parse threshold values
+    const match = message.match(/!setthreshold\s+bits=(\d+)\s+subs=(\d+)/i);
+    
+    if (match && match[1] && match[2]) {
+      const bitThreshold = parseInt(match[1]);
+      const subThreshold = parseInt(match[2]);
+      
+      // Update configuration
+      const saved = saveConfig(bitThreshold, subThreshold);
+      
+      if (saved) {
+        console.log(`Test command: ${username} updated thresholds: bits=${bitThreshold}, subs=${subThreshold}`);
+        return res.json({
+          success: true,
+          message: `Thresholds updated: bits=${bitThreshold}, subs=${subThreshold}`,
+          config: {
+            bitThreshold: BIT_THRESHOLD_FOR_SPIN,
+            giftSubThreshold: GIFT_SUB_THRESHOLD
+          }
+        });
+      }
+    }
+    
+    return res.status(400).json({ error: 'Invalid threshold format' });
+  }
+  
+  return res.status(400).json({ error: 'Unsupported command' });
+});
+
 // API endpoint to get combined data in a single CSV
 app.get('/api/combined/download', (req, res) => {
   try {
